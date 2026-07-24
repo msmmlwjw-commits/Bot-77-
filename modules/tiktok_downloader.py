@@ -9,22 +9,49 @@ logger = logging.getLogger(__name__)
 class TikTokDownloader:
     """Handle TikTok video downloads."""
     
+    # ✅ استراتيجية محسّنة للفيديوهات الطويلة والقصيرة
     BASE_YDL_OPTS = {
-        "merge_output_format": "mp4",
         "quiet": False,
         "no_warnings": False,
         "socket_timeout": 30,
         "retries": 3,
+        "cookiefile": None,
     }
     
-    ATTEMPT_PROFILES = [
+    # استراتيجية للفيديوهات العادية (القصيرة)
+    SHORT_VIDEO_PROFILES = [
         {
             "format": "best[ext=mp4]/best",
+            "merge_output_format": "mp4",
             "extractor_args": {"tiktok": {"api_hostname": ["api22-normal-c-useast2a.tiktokv.com"]}},
         },
         {
             "format": "best[ext=mp4]/best",
+            "merge_output_format": "mp4",
             "extractor_args": {"tiktok": {"api_hostname": ["api19-normal-c-useast1a.tiktokv.com"]}},
+        },
+    ]
+    
+    # ✅ استراتيجية محسّنة للفيديوهات الطويلة (مع ضمان الصوت)
+    LONG_VIDEO_PROFILES = [
+        {
+            # الخيار الأول: دمج الفيديو والصوت بشكل منفصل (يضمن الصوت)
+            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "merge_output_format": "mp4",
+            "postprocessor_args": ["-c:v", "copy", "-c:a", "aac", "-strict", "experimental"],
+            "extractor_args": {"tiktok": {"api_hostname": ["api22-normal-c-useast2a.tiktokv.com"]}},
+        },
+        {
+            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            "merge_output_format": "mp4",
+            "postprocessor_args": ["-c:v", "copy", "-c:a", "aac", "-strict", "experimental"],
+            "extractor_args": {"tiktok": {"api_hostname": ["api19-normal-c-useast1a.tiktokv.com"]}},
+        },
+        {
+            # خيار بديل: استخدام best مباشرة
+            "format": "best",
+            "merge_output_format": "mp4",
+            "extractor_args": {"tiktok": {"api_hostname": ["api22-normal-c-useast2a.tiktokv.com"]}},
         },
     ]
     
@@ -32,7 +59,7 @@ class TikTokDownloader:
     RETRY_DELAY = 1
     
     @staticmethod
-    def download_tiktok_video(url: str, output_path: str, user_agent: str) -> Optional[str]:
+    def download_tiktok_video(url: str, output_path: str, user_agent: str, is_long: bool = False) -> Optional[str]:
         """
         Download a single TikTok video.
         
@@ -40,23 +67,27 @@ class TikTokDownloader:
             url: TikTok video URL
             output_path: Directory to save video
             user_agent: User agent string
+            is_long: True إذا كان الفيديو طويل (> 1 دقيقة)
         
         Returns:
             Path to downloaded video file or None if failed
         """
+        # اختر الاستراتيجية المناسبة
+        profiles = TikTokDownloader.LONG_VIDEO_PROFILES if is_long else TikTokDownloader.SHORT_VIDEO_PROFILES
+        
         last_exc = None
-        total_attempts = TikTokDownloader.MAX_RETRIES * len(TikTokDownloader.ATTEMPT_PROFILES)
+        total_attempts = TikTokDownloader.MAX_RETRIES * len(profiles)
         attempt_num = 0
         
         for retry in range(TikTokDownloader.MAX_RETRIES):
-            for profile in TikTokDownloader.ATTEMPT_PROFILES:
+            for profile in profiles:
                 attempt_num += 1
                 opts = {**TikTokDownloader.BASE_YDL_OPTS, **profile}
                 opts["outtmpl"] = os.path.join(output_path, "video.%(ext)s")
                 opts["http_headers"] = {"User-Agent": user_agent}
                 
                 logger.info(
-                    f"Download attempt {attempt_num}/{total_attempts} (retry={retry}) — url={url}"
+                    f"Download attempt {attempt_num}/{total_attempts} (retry={retry}, long={is_long}) — url={url}"
                 )
                 
                 try:
