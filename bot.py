@@ -90,7 +90,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (iPad; CPU OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
 ]
 
-# ✅ مُحسّن: إصلاح مشكلة الصوت في الفيديوهات الطويلة
+# ✅ استراتيجية عامة للفيديوهات العادية (غير TikTok)
 BASE_YDL_OPTS = {
     "merge_output_format": "mp4",
     "quiet": False,
@@ -98,23 +98,18 @@ BASE_YDL_OPTS = {
     "socket_timeout": 30,
     "retries": 3,
     "cookiefile": None,
-    "postprocessor_args": ["-c:v", "copy", "-c:a", "aac"],
 }
 
 ATTEMPT_PROFILES = [
     {
-        # ✅ إصلاح: استخدام best بدلاً من bestvideo+bestaudio لتجنب مشاكل الدمج
-        "format": "best[ext=mp4]/best",
-        "extractor_args": {"tiktok": {"api_hostname": ["api22-normal-c-useast2a.tiktokv.com"]}},
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "postprocessor_args": ["-c:v", "copy", "-c:a", "aac", "-strict", "experimental"],
     },
     {
         "format": "best[ext=mp4]/best",
-        "extractor_args": {"tiktok": {"api_hostname": ["api19-normal-c-useast1a.tiktokv.com"]}},
     },
     {
-        # خيار بديل: جودة أقل لكن أكثر استقراراً
         "format": "best",
-        "extractor_args": {"tiktok": {"api_hostname": ["api22-normal-c-useast2a.tiktokv.com"]}},
     },
 ]
 
@@ -182,7 +177,7 @@ def extract_all_video_urls(text: str) -> list[Tuple[str, str]]:
     found.sort(key=lambda x: x[0])
     return [(url, platform) for _, url, platform in found]
 
-def download_video(url: str, output_path: str) -> dict:
+def download_video(url: str, output_path: str, platform: str) -> dict:
     """Download video with retries and multiple profiles."""
     last_exc: Exception | None = None
     total_attempts = MAX_RETRIES * len(ATTEMPT_PROFILES)
@@ -195,8 +190,8 @@ def download_video(url: str, output_path: str) -> dict:
             opts["outtmpl"] = output_path
             opts["http_headers"] = {"User-Agent": random.choice(USER_AGENTS)}
             logger.info(
-                "Download attempt %d/%d (retry=%d) — url=%s",
-                attempt_num, total_attempts, retry, url
+                "Download attempt %d/%d (retry=%d, platform=%s) — url=%s",
+                attempt_num, total_attempts, retry, platform, url
             )
             try:
                 with yt_dlp.YoutubeDL(opts) as ydl:
@@ -376,7 +371,7 @@ def _process_single_url(message: telebot.types.Message, url: str) -> None:
     
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
-            info = download_video(resolved_url, os.path.join(tmpdir, "video.%(ext)s"))
+            info = download_video(resolved_url, os.path.join(tmpdir, "video.%(ext)s"), platform or "unknown")
             video_file = find_downloaded_file(tmpdir)
             
             with open(video_file, "rb") as vf:
@@ -562,8 +557,12 @@ def _fetch_tiktok_videos(user_id: int, session: Dict, batch_size: int, chat_id: 
                     continue
                 
                 with tempfile.TemporaryDirectory() as tmpdir:
+                    # ✅ تحديد إذا كان الفيديو طويل أم قصير
+                    duration = video.get('duration', 0) or 0
+                    is_long = duration > 60  # أكثر من دقيقة واحدة
+                    
                     video_file = TikTokDownloader.download_tiktok_video(
-                        video_url, tmpdir, random.choice(USER_AGENTS)
+                        video_url, tmpdir, random.choice(USER_AGENTS), is_long=is_long
                     )
                     
                     if not video_file:
@@ -671,8 +670,12 @@ def _clone_full_account(user_id: int, session: Dict, chat_id: int) -> None:
                         continue
                     
                     with tempfile.TemporaryDirectory() as tmpdir:
+                        # ✅ تحديد إذا كان الفيديو طويل أم قصير
+                        duration = video.get('duration', 0) or 0
+                        is_long = duration > 60
+                        
                         video_file = TikTokDownloader.download_tiktok_video(
-                            video_url, tmpdir, random.choice(USER_AGENTS)
+                            video_url, tmpdir, random.choice(USER_AGENTS), is_long=is_long
                         )
                         
                         if not video_file:
