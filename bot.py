@@ -55,9 +55,9 @@ def load_users_from_db():
 
 load_users_from_db()
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ─── Platform Support ──────────────────────────────────────────────────────────────────────────────────
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ─── Platform Support ───────────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 SUPPORTED_PLATFORMS = {
     "tiktok":    re.compile(r"(https?://)?(www\.)?(vm\.|vt\.)?tiktok\.com/\S+", re.IGNORECASE),
@@ -90,6 +90,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (iPad; CPU OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
 ]
 
+# ✅ مُحسّن: إصلاح مشكلة الصوت في الفيديوهات الطويلة
 BASE_YDL_OPTS = {
     "merge_output_format": "mp4",
     "quiet": False,
@@ -97,25 +98,32 @@ BASE_YDL_OPTS = {
     "socket_timeout": 30,
     "retries": 3,
     "cookiefile": None,
+    "postprocessor_args": ["-c:v", "copy", "-c:a", "aac"],
 }
 
 ATTEMPT_PROFILES = [
     {
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        # ✅ إصلاح: استخدام best بدلاً من bestvideo+bestaudio لتجنب مشاكل الدمج
+        "format": "best[ext=mp4]/best",
         "extractor_args": {"tiktok": {"api_hostname": ["api22-normal-c-useast2a.tiktokv.com"]}},
     },
     {
         "format": "best[ext=mp4]/best",
         "extractor_args": {"tiktok": {"api_hostname": ["api19-normal-c-useast1a.tiktokv.com"]}},
     },
+    {
+        # خيار بديل: جودة أقل لكن أكثر استقراراً
+        "format": "best",
+        "extractor_args": {"tiktok": {"api_hostname": ["api22-normal-c-useast2a.tiktokv.com"]}},
+    },
 ]
 
 MAX_RETRIES = 3
 RETRY_DELAY = 1
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ─── Utility Functions ─────────────────────────────────────────────────────────────────────────────────
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ─── Utility Functions ──────────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def notify_admin(text: str) -> None:
     """Send notification to admin."""
@@ -212,9 +220,9 @@ def find_downloaded_file(tmpdir: str) -> str:
         raise FileNotFoundError("Downloaded file not found in tmpdir")
     return os.path.join(tmpdir, matches[0])
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ─── Keyboard Builders ─────────────────────────────────────────────────────────────────────────────────
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ─── Keyboard Builders ──────────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def build_main_keyboard() -> telebot.types.InlineKeyboardMarkup:
     """Build main menu keyboard."""
@@ -266,9 +274,9 @@ def build_broadcast_confirm_keyboard() -> telebot.types.InlineKeyboardMarkup:
     markup.add(telebot.types.InlineKeyboardButton("❌ إلغاء", callback_data="broadcast_cancel"))
     return markup
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ─── Welcome & Start Commands ──────────────────────────────────────────────────────────────────────────
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ─── Welcome & Start Commands ────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def get_welcome_text(first_name: str) -> str:
     """Get welcome message."""
@@ -324,9 +332,9 @@ def handle_start(message: telebot.types.Message) -> None:
         reply_markup=build_main_keyboard(),
     )
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ─── Regular Download Handlers ────────────────────────────────────────────────────────────────────────
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ─── Regular Download Handlers ──────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @bot.callback_query_handler(func=lambda call: call.data == "batch_download")
 def handle_batch_download(call: telebot.types.CallbackQuery) -> None:
@@ -444,15 +452,15 @@ def handle_regular_download(message: telebot.types.Message) -> None:
     
     _process_single_url(message, raw_url)
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ─── TikTok Clone Handlers ────────────────────────────────────────────────────────────────────────────
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ─── TikTok Clone Handlers ──────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @bot.callback_query_handler(func=lambda call: call.data == "tiktok_clone_start")
 def handle_tiktok_clone_start(call: telebot.types.CallbackQuery) -> None:
     """Start TikTok clone process."""
     bot.answer_callback_query(call.id)
-    user_states[call.from_user.id] = "waiting_tiktok_username"  # Fixed state name
+    user_states[call.from_user.id] = "waiting_tiktok_username"
     
     bot.send_message(
         call.message.chat.id,
@@ -498,7 +506,7 @@ def handle_tiktok_username_input(message: telebot.types.Message) -> None:
 def handle_tiktok_change_account(call: telebot.types.CallbackQuery) -> None:
     """Change TikTok account."""
     tiktok_cloner.change_account(call.from_user.id)
-    user_states[call.from_user.id] = "waiting_tiktok_username"  # Fixed state name
+    user_states[call.from_user.id] = "waiting_tiktok_username"
     bot.answer_callback_query(call.id)
     
     bot.send_message(
@@ -740,9 +748,9 @@ def handle_tiktok_continue_stop(call: telebot.types.CallbackQuery) -> None:
     else:
         bot.send_message(call.message.chat.id, "✅ تم الإيقاف")
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ─── Admin Panel Handlers ──────────────────────────────────────────────────────────────────────────────
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ─── Admin Panel Handlers ───────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @bot.callback_query_handler(func=lambda call: call.data == "admin_menu")
 def handle_admin_menu(call: telebot.types.CallbackQuery) -> None:
@@ -979,9 +987,9 @@ def handle_admin_stats(call: telebot.types.CallbackQuery) -> None:
         parse_mode="HTML",
     )
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ─── Back Handler ──────────────────────────────────────────────────────────────────────────────────────
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ─── Back Handler ───────────────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @bot.callback_query_handler(func=lambda call: call.data == "go_back")
 def handle_go_back(call: telebot.types.CallbackQuery) -> None:
@@ -1015,9 +1023,9 @@ def handle_admin_back(call: telebot.types.CallbackQuery) -> None:
         reply_markup=admin_panel.build_main_menu_keyboard(),
     )
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# ─── Main Bot Loop ────────────────────────────────────────────────────────────────────────────────────
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ─── Main Bot Loop ──────────────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 if __name__ == "__main__":
     keep_alive()
