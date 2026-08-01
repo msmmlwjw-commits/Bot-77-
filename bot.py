@@ -38,6 +38,8 @@ batch_mode_users: set[int] = set()
 user_states: Dict[int, str] = {}
 broadcast_data_store: Dict[int, Dict] = {}
 tiktok_download_threads: Dict[int, threading.Thread] = {}
+clone_cancellation: Dict[int, bool] = {}  # Track cancellation requests
+progress_messages: Dict[int, Dict] = {}  # Track progress messages
 
 def load_users_from_db():
     global seen_users, blocked_users
@@ -175,6 +177,11 @@ def build_continue_keyboard() -> telebot.types.InlineKeyboardMarkup:
     markup.add(telebot.types.InlineKeyboardButton("❌ إيقاف", callback_data="tiktok_stop"))
     return markup
 
+def build_clone_cancel_keyboard() -> telebot.types.InlineKeyboardMarkup:
+    markup = telebot.types.InlineKeyboardMarkup()
+    markup.add(telebot.types.InlineKeyboardButton("⛔ إلغاء الاستنساخ", callback_data="cancel_clone"))
+    return markup
+
 def build_broadcast_type_keyboard() -> telebot.types.InlineKeyboardMarkup:
     markup = telebot.types.InlineKeyboardMarkup()
     markup.add(telebot.types.InlineKeyboardButton("📝 نص", callback_data="broadcast_text"))
@@ -310,6 +317,7 @@ def handle_tiktok_username_input(message: telebot.types.Message) -> None:
     account_url = f"https://www.tiktok.com/@{username_input}"
     session = tiktok_cloner.start_clone_session(user_id, account_url)
     user_states[user_id] = None
+    clone_cancellation[user_id] = False
     bot.send_message(message.chat.id, f"✅ تم حفظ الحساب: <b>@{session['username']}</b>\n\nاختر العملية:",
                     parse_mode="HTML", reply_markup=build_tiktok_clone_keyboard())
 
@@ -328,7 +336,9 @@ def handle_tiktok_fetch_20(call: telebot.types.CallbackQuery) -> None:
         bot.answer_callback_query(call.id, "❌ لا توجد جلسة نشطة", show_alert=True)
         return
     bot.answer_callback_query(call.id)
-    bot.send_message(call.message.chat.id, "⏳ جاري جلب الفيديوهات...")
+    status_msg = bot.send_message(call.message.chat.id, "⏳ جاري جلب الفيديوهات...", reply_markup=build_clone_cancel_keyboard())
+    progress_messages[user_id] = {"chat_id": call.message.chat.id, "message_id": status_msg.message_id}
+    clone_cancellation[user_id] = False
     thread = threading.Thread(target=_fetch_tiktok_videos, args=(user_id, session, TIKTOK_BATCH_SIZE, call.message.chat.id))
     thread.daemon = True
     thread.start()
@@ -342,11 +352,32 @@ def _fetch_tiktok_videos(user_id: int, session: Dict, batch_size: int, chat_id: 
             return
         
         downloaded_count = 0
+        total_videos = len(videos)
+        
         for idx, video in enumerate(videos):
+            # Check for cancellation
+            if clone_cancellation.get(user_id, False):
+                bot.send_message(chat_id, f"⛔ تم إلغاء الاستنساخ!\nتم تحميل {downloaded_count} فيديو")
+                return
+            
             try:
                 video_url = video.get('url') or video.get('webpage_url')
                 if not video_url:
                     continue
+                
+                # Update progress
+                progress = int((idx / total_videos) * 100)
+                progress_text = (f"⏳ جاري التحميل...\n\n"
+                               f"📊 التقدم: {progress}%\n"
+                               f"🎬 الفيديو {idx + 1}/{total_videos}\n"
+                               f"✅ تم تحميل: {downloaded_count}")
+                
+                if user_id in progress_messages:
+                    try:
+                        bot.edit_message_text(progress_text, chat_id, progress_messages[user_id]["message_id"],
+                                            reply_markup=build_clone_cancel_keyboard())
+                    except:
+                        pass
                 
                 with tempfile.TemporaryDirectory() as tmpdir:
                     video_file = TikTokDownloader.download_tiktok_video(video_url, tmpdir, random.choice(USER_AGENTS))
@@ -389,7 +420,10 @@ def handle_tiktok_clone_full(call: telebot.types.CallbackQuery) -> None:
         bot.answer_callback_query(call.id, "❌ لا توجد جلسة نشطة", show_alert=True)
         return
     bot.answer_callback_query(call.id)
-    bot.send_message(call.message.chat.id, "⏳ جاري استنساخ الحساب بالكامل...\n\nقد يستغرق وقتاً طويلاً.")
+    status_msg = bot.send_message(call.message.chat.id, "⏳ جاري استنساخ الحساب بالكامل...\n\nقد يستغرق وقتاً طويلاً.", 
+                                 reply_markup=build_clone_cancel_keyboard())
+    progress_messages[user_id] = {"chat_id": call.message.chat.id, "message_id": status_msg.message_id}
+    clone_cancellation[user_id] = False
     thread = threading.Thread(target=_clone_full_account, args=(user_id, session, call.message.chat.id))
     thread.daemon = True
     thread.start()
@@ -400,17 +434,42 @@ def _clone_full_account(user_id: int, session: Dict, chat_id: int) -> None:
         downloaded_count = 0
         batch_index = session['last_video_index']
         batch_size = TIKTOK_BATCH_SIZE
+        total_processed = 0
         
         while True:
+            # Check for cancellation
+            if clone_cancellation.get(user_id, False):
+                bot.send_message(chat_id, f"⛔ تم إلغاء الاستنساخ!\nتم تحميل {downloaded_count} فيديو")
+                return
+            
             videos = TikTokDownloader.get_account_videos(session['account_url'], batch_index, batch_size)
             if not videos:
                 break
             
-            for video in videos:
+            for idx, video in enumerate(videos):
+                # Check for cancellation again
+                if clone_cancellation.get(user_id, False):
+                    bot.send_message(chat_id, f"⛔ تم إلغاء الاستنساخ!\nتم تحميل {downloaded_count} فيديو")
+                    return
+                
                 try:
                     video_url = video.get('url') or video.get('webpage_url')
                     if not video_url:
                         continue
+                    
+                    # Update progress
+                    total_processed += 1
+                    progress = min((total_processed / 10) * 10, 100)  # Show progress in 10% increments
+                    progress_text = (f"⏳ جاري الاستنساخ...\n\n"
+                                   f"📊 التقدم: {progress}%\n"
+                                   f"✅ تم تحميل: {downloaded_count}")
+                    
+                    if user_id in progress_messages and total_processed % 2 == 0:
+                        try:
+                            bot.edit_message_text(progress_text, chat_id, progress_messages[user_id]["message_id"],
+                                                reply_markup=build_clone_cancel_keyboard())
+                        except:
+                            pass
                     
                     with tempfile.TemporaryDirectory() as tmpdir:
                         video_file = TikTokDownloader.download_tiktok_video(video_url, tmpdir, random.choice(USER_AGENTS))
@@ -442,6 +501,13 @@ def _clone_full_account(user_id: int, session: Dict, chat_id: int) -> None:
     except Exception as e:
         logger.error(f"Error: {e}")
         bot.send_message(chat_id, f"❌ حدث خطأ: {str(e)}")
+
+@bot.callback_query_handler(func=lambda call: call.data == "cancel_clone")
+def handle_cancel_clone(call: telebot.types.CallbackQuery) -> None:
+    user_id = call.from_user.id
+    clone_cancellation[user_id] = True
+    bot.answer_callback_query(call.id, "✅ تم طلب الإلغاء...")
+    bot.edit_message_text("⛔ جاري إلغاء الاستنساخ...", call.message.chat.id, call.message.message_id)
 
 @bot.callback_query_handler(func=lambda call: call.data in ["tiktok_continue", "tiktok_stop"])
 def handle_tiktok_continue_stop(call: telebot.types.CallbackQuery) -> None:
