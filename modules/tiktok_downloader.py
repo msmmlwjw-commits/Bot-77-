@@ -17,10 +17,8 @@ class TikTokDownloader:
         "cookiefile": None,
     }
     
-    # ✅ استراتيجية موحدة للجميع - تضمن الصوت بـ 100%
     DOWNLOAD_PROFILES = [
         {
-            # الخيار الأول: دمج الفيديو والصوت بشكل منفصل (يضمن الصوت)
             "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio/best[ext=mp4]/best",
             "merge_output_format": "mp4",
             "postprocessor_args": ["-c:v", "copy", "-c:a", "aac", "-b:a", "128k"],
@@ -28,7 +26,6 @@ class TikTokDownloader:
             "extractor_args": {"tiktok": {"api_hostname": ["api22-normal-c-useast2a.tiktokv.com"]}},
         },
         {
-            # الخيار الثاني: نفس الاستراتيجية لكن مع hostname مختلف
             "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[ext=mp4]+bestaudio/best[ext=mp4]/best",
             "merge_output_format": "mp4",
             "postprocessor_args": ["-c:v", "copy", "-c:a", "aac", "-b:a", "128k"],
@@ -36,30 +33,18 @@ class TikTokDownloader:
             "extractor_args": {"tiktok": {"api_hostname": ["api19-normal-c-useast1a.tiktokv.com"]}},
         },
         {
-            # الخيار الثالث: محاولة الحصول على أفضل جودة بأي شكل
             "format": "best",
             "merge_output_format": "mp4",
             "extractor_args": {"tiktok": {"api_hostname": ["api22-normal-c-useast2a.tiktokv.com"]}},
         },
     ]
     
-    MAX_RETRIES = 5  # زيادة عدد المحاولات
-    RETRY_DELAY = 2  # تأخير أطول بين المحاولات
+    MAX_RETRIES = 5
+    RETRY_DELAY = 2
     
     @staticmethod
     def download_tiktok_video(url: str, output_path: str, user_agent: str, is_long: bool = False) -> Optional[str]:
-        """
-        Download a single TikTok video with guaranteed audio.
-        
-        Args:
-            url: TikTok video URL
-            output_path: Directory to save video
-            user_agent: User agent string
-            is_long: Ignored - we use same strategy for all videos
-        
-        Returns:
-            Path to downloaded video file or None if failed
-        """
+        """Download a single TikTok video with guaranteed audio."""
         last_exc = None
         total_attempts = TikTokDownloader.MAX_RETRIES * len(TikTokDownloader.DOWNLOAD_PROFILES)
         attempt_num = 0
@@ -71,38 +56,23 @@ class TikTokDownloader:
                 opts["outtmpl"] = os.path.join(output_path, "video.%(ext)s")
                 opts["http_headers"] = {"User-Agent": user_agent}
                 
-                logger.info(
-                    f"⏳ محاولة التحميل {attempt_num}/{total_attempts} (retry={retry}) — url={url}"
-                )
+                logger.info(f"⏳ محاولة {attempt_num}/{total_attempts} — {url}")
                 
                 try:
                     with yt_dlp.YoutubeDL(opts) as ydl:
-                        logger.info(f"🔍 جاري استخراج معلومات الفيديو...")
                         info = ydl.extract_info(url, download=True)
-                        
-                        # تحقق من وجود الصوت
-                        if info:
-                            duration = info.get('duration', 0)
-                            has_audio = info.get('acodec') != 'none'
-                            logger.info(f"✅ تم التحميل بنجاح! المدة: {duration}s، صوت: {has_audio}")
                     
                     logger.info(f"✅ نجح التحميل في المحاولة {attempt_num}")
-                    
-                    # Find and return the downloaded file
                     return TikTokDownloader.find_downloaded_file(output_path)
                 
                 except Exception as exc:
                     last_exc = exc
-                    logger.warning(
-                        f"❌ فشلت المحاولة {attempt_num}/{total_attempts}: {exc}"
-                    )
+                    logger.warning(f"❌ فشلت المحاولة {attempt_num}/{total_attempts}")
                     import time
                     if attempt_num < total_attempts:
-                        logger.info(f"⏰ انتظار {TikTokDownloader.RETRY_DELAY}s قبل المحاولة التالية...")
                         time.sleep(TikTokDownloader.RETRY_DELAY)
         
         if last_exc:
-            logger.error(f"❌ فشل التحميل بعد {total_attempts} محاولة: {last_exc}")
             raise last_exc
         return None
     
@@ -112,26 +82,14 @@ class TikTokDownloader:
         try:
             matches = [f for f in os.listdir(tmpdir) if f.startswith("video.")]
             if matches:
-                file_path = os.path.join(tmpdir, matches[0])
-                logger.info(f"📁 تم العثور على الملف: {file_path}")
-                return file_path
+                return os.path.join(tmpdir, matches[0])
         except Exception as e:
-            logger.error(f"Error finding downloaded file: {e}")
+            logger.error(f"Error finding file: {e}")
         return None
     
     @staticmethod
     def get_account_videos(account_url: str, start_index: int = 0, limit: int = 20) -> List[Dict]:
-        """
-        Get videos from a TikTok account.
-        
-        Args:
-            account_url: TikTok account URL (e.g., https://www.tiktok.com/@username)
-            start_index: Starting index for pagination
-            limit: Number of videos to fetch
-        
-        Returns:
-            List of video info dictionaries
-        """
+        """Get videos from a TikTok account."""
         try:
             opts = {
                 "quiet": False,
@@ -142,7 +100,7 @@ class TikTokDownloader:
                 "playliststart": start_index + 1,
             }
             
-            logger.info(f"🔍 جاري جلب فيديوهات من {account_url} (البداية={start_index}, العدد={limit})")
+            logger.info(f"🔍 جاري جلب {limit} فيديو من {account_url}")
             
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(account_url, download=False)
@@ -152,9 +110,8 @@ class TikTokDownloader:
                 logger.info(f"✅ تم العثور على {len(entries)} فيديو")
                 return entries
             
-            logger.warning("⚠️ لم يتم العثور على فيديوهات في الحساب")
             return []
         
         except Exception as e:
-            logger.error(f"❌ خطأ في جلب فيديوهات الحساب: {e}")
+            logger.error(f"❌ خطأ: {e}")
             return []
